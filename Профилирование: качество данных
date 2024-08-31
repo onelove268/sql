@@ -1,0 +1,66 @@
+-- Профилирование - это способ выявить проблемы с качеством данных на ранней стадии, до того, как они негативно поввлияют на результаты и выводы, сделанные на основе этих данных. Профилирование выявляет null-значения, категори-
+альные признаки, которые необходимо преобразовать, поля с несколькими значенеями, которые нужно разделить, и необычные форматы даты и времении. Профилирование также может выявить пробелы и скачкообразные измнения в данных при
+помощи отслеживания изменений или простоев.
+
+-- Поиск дубликатов
+-- Дубликат - это когда у вас есть две (или более) строки с одинаковой информацией.
+
+-- упордочить все столбцы
+SELECT COLUMN_a, COLUMN_b, COLUMN_c...
+FROM TABLE
+ORDER By 1,2,3...
+
+-- подсчитать все строки. Этот запрос проверяет, имеются ли вообще какие-либо дубликаты. Если запрос возвращает 0, то все впорядке.
+SELECT COUNT(*)
+FROM
+(
+	SELECT COLUMN_a, COLUMN_b, COLUMN_c...
+ 	,count(*) as records
+	FROM TABLE
+	ORDER By 1,2,3...
+) a
+WHERE records > 1
+-- Для более подробной информации можно вывести количетсво дубликатов
+SELECT records, COUNT(*)
+FROM
+(
+	SELECT COLUMN_a, COLUMN_b, COLUMN_c...
+ 	,count(*) as records
+	FROM TABLE
+	ORDER By 1,2,3...
+) a
+WHERE records > 1
+GROUP BY 1
+
+-- Вывести все дублирующие поля
+SELECT *
+FROM
+(
+	SELECT COLUMN_a, COLUMN_b, COLUMN_c...
+ 	,count(*) as records
+	FROM TABLE
+	ORDER By 1,2,3...
+) a
+WHERE records = 2
+
+-- Исключение дубликатов с помощью GROUP BY и DISTINCT
+SELECT DISTINCT Customers.CustomerID, Customers.CompanyName, Customers.Phone
+FROM Customers
+JOIN Orders On Customers.CustomerID = Orders.CustomerID
+ORDER BY 1
+
+--
+
+SELECT Customers.CustomerID, Customers.CompanyName, Customers.Phone
+FROM Customers
+JOIN Orders On Customers.CustomerID = Orders.CustomerID
+GROUP BY 1, 2, 3
+
+-- Нахождение первой и/или последней даты ордера для каждого клиента
+SELECT customerid, min(orderdate) as first_order_data, max(orderdate) as last_order_data, COUNT(*) as total_orders
+FROM Orders
+GROUP BY customerid
+
+--
+
+
