@@ -7,3 +7,20 @@ case WHEN gender = 'F' THEN 'Female'
      ELSE gender
      END as gender_cleaned
  
+--
+
+SELECT response_id, ball,
+CASE WHEN ball <= 6 THEN 'Критик'
+     WHEN ball <= 8 THEN 'Нейтрал'
+     ELSE 'Промоутер'
+    EnD as response_type
+FROM nps
+
+-- 
+SELECT response_id, ball,
+CASE WHEN ball in (0, 1, 2, 3, 4, 5, 6) THEN 'Критик'
+	 WHEN ball in (7, 8) THEN 'Нейтрал'
+     WHEN ball IN (9,10) THEN 'Промоутер'
+    EnD as response_type
+FROM nps
+
