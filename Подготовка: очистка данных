@@ -1,3 +1,9 @@
 --  Профилирование часто выявлет, какие исправления в данных могут сделать их более полезными для анализа. Некоторые из этих исправлений предствляют собой CASE-преобразование, исправление null-значений и изменений типа данных.
 
 --- Очистка данных с помощью CASE
+case WHEN gender = 'F' THEN 'Female'
+	 WHEN gender = 'female' THEN 'Female'
+     WHEN gender = 'femme' THEN 'Female'
+     ELSE gender
+     END as gender_cleaned
+ 
