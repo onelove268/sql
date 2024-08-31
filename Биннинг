@@ -1,0 +1,30 @@
+-- Группировка клиентов по сумме заказа
+SELECT
+case WHEN order_amount <= 100 THEN 'до 100'
+     when order_amount <= 500 THEN '100-500'
+     ELSE '500+' END as amount_bin,
+case WHEN order_amount <= 100 THEN 'small'
+     when order_amount <= 500 THEN 'medium'
+     ELSE 'large' END as amount_category,
+COUNT(customerid) as Customers
+FROM Orders2
+GROUP BY 1, 2
+
+-- группировка клиентов по ячейкам одинакового размера
+SELECT round(order_amount, -1) as bin, count(CustomerID) as Customers
+FROM Orders2
+GROUP BY 1
+
+-- группировка клиентов через логорифмирование
+SELECT log(order_amount) as bin, count(CustomerID) as Customers
+FROM Orders2
+GROUP BY 1
+
+-- группировка через n-тили
+SELECT ntile, min(order_amount) as lower_bound, max(order_amount) as upper_bound, COUNT(orderid) as Orders
+FROM
+(SELECT customerid, orderid, order_amount,
+ ntile(10) over (ORDER by order_amount) as ntile
+ FROM Orders2
+ ) a
+ GROUP BY 1
