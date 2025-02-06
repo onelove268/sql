@@ -1,0 +1,353 @@
+WITH empl_no_mvz AS ( -- таблица сотрудников сейлз без разбивки на МВЗ
+    SELECT DISTINCT
+        empl_date,
+        DATE_TRUNC('month', empl_date) AS month,
+        ech.project_id,
+        ech.project_name,
+        CASE
+            WHEN ech.project_id = '297d6376-8e3c-0ad7-05f5-b08f0074a873' THEN 29
+            WHEN ech.role_empl_part IS NULL THEN 100
+            ELSE ech.role_empl_part
+        END AS role_empl_part,
+        COUNT(*) AS day
+    FROM 
+        fin_reports.empl_circles_history ech
+    WHERE 
+        empl_date BETWEEN '2024-01-01 00:00:00' AND '2024-12-31 23:59:59'
+        AND ech.mvz = '100 | Sales'
+    GROUP BY empl_date, month, project_id, project_name, role_empl_part
+),
+empl_day_no_mvz AS ( -- подсчет количества отработанных дней в месяце
+    SELECT
+        month,
+        project_id,
+        project_name,
+        COUNT(day) AS e_day,
+        EXTRACT(DAY FROM (DATE_TRUNC('month', month) + INTERVAL '1 month - 1 day')) AS days_in_month,
+        role_empl_part
+    FROM empl_no_mvz enm
+    GROUP BY month, project_id, project_name, role_empl_part
+),
+empl_mvz AS ( -- таблица сотрудников сейлз с разбивкой по МВЗ
+    SELECT DISTINCT 
+        empl_date,
+        DATE_TRUNC('month', empl_date) AS month,
+        ech.project_id,
+        ech.project_name,
+        ech.mvz,
+        ech.circle_1,
+        ech.circle_2,
+        COUNT(*) AS day_mvz
+    FROM 
+        fin_reports.empl_circles_history ech
+    WHERE 
+        empl_date BETWEEN '2024-01-01 00:00:00' AND '2024-12-31 23:59:59'
+        AND ech.mvz = '100 | Sales'
+    GROUP BY empl_date, month, project_id, project_name, mvz, circle_1, circle_2
+),
+empl_day_mvz AS ( -- подсчет количества отработанных дней в месяце по МВЗ
+    SELECT 
+        em.month,
+        em.project_id,
+        em.project_name,
+        em.mvz,
+        em.circle_1,
+        em.circle_2,
+        COUNT(em.day_mvz) AS day_mvz,
+        EXTRACT(DAY FROM (DATE_TRUNC('month', em.month) + INTERVAL '1 month - 1 day')) AS days_in_month,
+        enm.role_empl_part,
+        CASE 
+            WHEN COUNT(em.day_mvz) = 0 THEN 0
+            WHEN em.project_id = '2ebd42a6-3c58-3f04-e1a6-b118007bbd66' 
+                 AND em.month = '2024-11-01 00:00:00' THEN
+                CASE 
+                    WHEN em.circle_2 = '156 | New Logos 5' AND enm.role_empl_part = 50 THEN 0.633333333333333
+                    WHEN em.circle_2 = '156 | New Logos 5' AND enm.role_empl_part = 100 THEN 0.366666666666667
+                    WHEN em.circle_2 = '155 | New Logos 4' AND enm.role_empl_part = 50 THEN 0.633333333333333
+                    WHEN em.circle_2 = '155 | New Logos 4' AND enm.role_empl_part = 100 THEN 0
+                    ELSE (COUNT(em.day_mvz)::FLOAT / EXTRACT(DAY FROM (DATE_TRUNC('month', em.month) + INTERVAL '1 month - 1 day')))
+                end
+            when COUNT(em.day_mvz) = enm.e_day then 1
+            ELSE (COUNT(em.day_mvz)::FLOAT / EXTRACT(DAY FROM (DATE_TRUNC('month', em.month) + INTERVAL '1 month - 1 day')))
+        END AS percentage
+    FROM empl_mvz em
+    JOIN empl_day_no_mvz enm 
+        ON em.month = enm.month 
+        AND em.project_id = enm.project_id 
+        AND em.project_name = enm.project_name
+    GROUP BY em.month, em.project_id, em.project_name, em.mvz, em.circle_1, em.circle_2, enm.role_empl_part, enm.e_day
+),
+fot_total AS (
+    SELECT DISTINCT 
+        project_id, project_name, project_stage, 
+        year, 
+       jan_fot, jan_bonus, jan_other, jan_insure, 
+       feb_fot, feb_bonus, feb_other, feb_insure, 
+       mar_fot, mar_bonus, mar_other, mar_insure, 
+       apr_fot, apr_bonus, apr_other, apr_insure, 
+       may_fot, may_bonus, may_other, may_insure, 
+       jun_fot, jun_bonus, jun_other, jun_insure, 
+       jul_fot, jul_bonus, jul_other, jul_insure, 
+       aug_fot, aug_bonus, aug_other, aug_insure, 
+       sep_fot, sep_bonus, sep_other, sep_insure, 
+       oct_fot, oct_bonus, oct_other, oct_insure, 
+       nov_fot, nov_bonus, nov_other, nov_insure, 
+       dec_fot, dec_bonus, dec_other, dec_insure
+    FROM fin_raw.employees_raw_new_fin ernf 
+    WHERE ernf.year = '2024'
+)
+SELECT 
+    edm.month,
+    edm.project_id,
+    edm.project_name,
+    edm.mvz,
+    edm.circle_1,
+    edm.circle_2,
+    edm.day_mvz,
+    edm.role_empl_part,
+    edm.percentage,
+    CASE -- фот. янв
+        WHEN edm.month = '2024-01-01 00:00:00.000' 
+        THEN (ft.jan_fot * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS jan_fot,
+CASE -- бонус. янв
+        WHEN edm.month = '2024-01-01 00:00:00.000' 
+        THEN (ft.jan_bonus * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS jan_bonus,
+CASE -- проч. янв
+        WHEN edm.month = '2024-01-01 00:00:00.000' 
+        THEN (ft.jan_other * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS jan_other,
+CASE -- взносы. янв
+        WHEN edm.month = '2024-01-01 00:00:00.000' 
+        THEN (ft.jan_insure * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS jan_insure,
+CASE -- фот. фев
+        WHEN edm.month = '2024-02-01 00:00:00.000' 
+        THEN (ft.feb_fot * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS feb_fot,
+    CASE -- бонус. фев
+        WHEN edm.month = '2024-02-01 00:00:00.000' 
+        THEN (ft.feb_bonus * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS feb_bonus, 
+    CASE -- проч. фев
+        WHEN edm.month = '2024-02-01 00:00:00.000' 
+        THEN (ft.feb_other * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS feb_other,
+    CASE -- взносы. фев
+        WHEN edm.month = '2024-02-01 00:00:00.000' 
+        THEN (ft.feb_insure * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS feb_insure,
+CASE -- фот. март
+        WHEN edm.month = '2024-03-01 00:00:00.000' 
+        THEN (ft.mar_fot * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS mar_fot,
+    CASE -- бонус. март
+        WHEN edm.month = '2024-03-01 00:00:00.000' 
+        THEN (ft.mar_bonus * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS mar_bonus,
+CASE -- проч. март
+        WHEN edm.month = '2024-03-01 00:00:00.000' 
+        THEN (ft.mar_other * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS mar_other,
+    CASE -- взносы. март
+        WHEN edm.month = '2024-03-01 00:00:00.000' 
+        THEN (ft.mar_insure * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS mar_insure,
+CASE -- фот. апр
+        WHEN edm.month = '2024-04-01 00:00:00.000' 
+        THEN (ft.apr_fot * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS apr_fot,
+CASE -- бонус. апр
+        WHEN edm.month = '2024-04-01 00:00:00.000' 
+        THEN (ft.apr_bonus * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS apr_bonus,
+CASE -- проч. апр
+        WHEN edm.month = '2024-04-01 00:00:00.000' 
+        THEN (ft.apr_other * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS apr_other,
+    CASE -- взносы. апр
+        WHEN edm.month = '2024-04-01 00:00:00.000' 
+        THEN (ft.apr_insure * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS apr_insure,
+CASE -- фот. май
+        WHEN edm.month = '2024-05-01 00:00:00.000' 
+        THEN (ft.may_fot * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS may_fot,
+CASE -- бонус. май
+        WHEN edm.month = '2024-05-01 00:00:00.000' 
+        THEN (ft.may_bonus * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS may_bonus,
+CASE -- проч. май
+        WHEN edm.month = '2024-05-01 00:00:00.000' 
+        THEN (ft.may_other * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS may_other,
+CASE -- взносы. май
+        WHEN edm.month = '2024-05-01 00:00:00.000' 
+        THEN (ft.may_insure * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS may_insure,
+CASE -- фот. июнь
+        WHEN edm.month = '2024-06-01 00:00:00.000' 
+        THEN (ft.jun_fot * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS jun_fot,
+    CASE -- бонус. июнь	
+        WHEN edm.month = '2024-06-01 00:00:00.000' 
+        THEN (ft.jun_bonus * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS jun_bonus,
+    CASE -- проч. июнь	
+        WHEN edm.month = '2024-06-01 00:00:00.000' 
+        THEN (ft.jun_other * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS jun_other,
+CASE -- взносы. июнь	
+        WHEN edm.month = '2024-06-01 00:00:00.000' 
+        THEN (ft.jun_insure * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS jun_insure,
+       CASE -- фот. июль
+        WHEN edm.month = '2024-07-01 00:00:00.000' 
+        THEN (ft.jul_fot * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS jul_fot,
+CASE -- бонус. июль
+        WHEN edm.month = '2024-07-01 00:00:00.000' 
+        THEN (ft.jul_bonus * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS jul_bonus,
+CASE -- проч. июль
+        WHEN edm.month = '2024-07-01 00:00:00.000' 
+        THEN (ft.jul_other * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS jul_other,
+    CASE -- взносы. июль
+        WHEN edm.month = '2024-07-01 00:00:00.000' 
+        THEN (ft.jul_insure * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS jul_insure,
+    CASE -- фот. авг
+        WHEN edm.month = '2024-08-01 00:00:00.000' 
+        THEN (ft.aug_fot * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS aug_fot,
+CASE -- бонус. авг
+        WHEN edm.month = '2024-08-01 00:00:00.000' 
+        THEN (ft.aug_bonus * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS aug_bonus,
+CASE -- проч. авг
+        WHEN edm.month = '2024-08-01 00:00:00.000' 
+        THEN (ft.aug_other * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS aug_other,
+CASE -- взносы. авг
+        WHEN edm.month = '2024-08-01 00:00:00.000' 
+        THEN (ft.aug_insure * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS aug_insure,
+    CASE -- фот. сен
+        WHEN edm.month = '2024-09-01 00:00:00.000' 
+        THEN (ft.sep_fot * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS sep_fot,
+CASE -- бонус. сен
+        WHEN edm.month = '2024-09-01 00:00:00.000' 
+        THEN (ft.sep_bonus * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS sep_bonus,
+CASE -- проч. сен
+        WHEN edm.month = '2024-09-01 00:00:00.000' 
+        THEN (ft.sep_other * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS sep_other,
+CASE -- взносы. сен
+        WHEN edm.month = '2024-09-01 00:00:00.000' 
+        THEN (ft.sep_insure * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS sep_insure,
+    CASE -- фот. окт
+        WHEN edm.month = '2024-10-01 00:00:00.000' 
+        THEN (ft.oct_fot * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS oct_fot,
+    CASE -- бонус. окт
+        WHEN edm.month = '2024-10-01 00:00:00.000' 
+        THEN (ft.oct_bonus * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS oct_bonus,
+    CASE -- проч. окт
+        WHEN edm.month = '2024-10-01 00:00:00.000' 
+        THEN (ft.oct_other * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS oct_other,
+    CASE -- взносы. окт
+        WHEN edm.month = '2024-10-01 00:00:00.000' 
+        THEN (ft.oct_insure * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS oct_insure,
+CASE -- фот. ноя
+        WHEN edm.month = '2024-11-01 00:00:00.000' 
+        THEN (ft.nov_fot * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS nov_fot,
+    CASE -- бонус. ноя
+        WHEN edm.month = '2024-11-01 00:00:00.000'
+        THEN (ft.nov_bonus * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS nov_bonus,
+CASE -- проч. ноя
+        WHEN edm.month = '2024-11-01 00:00:00.000' 
+        THEN (ft.nov_other * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS nov_other,
+CASE -- взносы. ноя
+        WHEN edm.month = '2024-11-01 00:00:00.000' 
+        THEN (ft.nov_insure * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS nov_insure,
+CASE -- фот. дек
+        WHEN edm.month = '2024-12-01 00:00:00.000' 
+        THEN (ft.dec_fot * (edm.role_empl_part/100) * edm.percentage)
+        ELSE 0 
+    END AS dec_fot,
+CASE -- бонус. дек	
+        WHEN edm.month = '2024-12-01 00:00:00.000' 
+        THEN (ft.dec_bonus * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS dec_bonus,
+CASE -- проч. дек	
+        WHEN edm.month = '2024-12-01 00:00:00.000' 
+        THEN (ft.dec_other * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS dec_other,
+CASE -- взносы. дек	
+        WHEN edm.month = '2024-12-01 00:00:00.000' 
+        THEN (ft.dec_insure * (edm.role_empl_part/100) * percentage)
+        ELSE 0 
+    END AS dec_insure
+FROM
+    empl_day_mvz edm
+LEFT JOIN
+    fot_total ft ON edm.project_id = ft.project_id
+ORDER BY edm.month, edm.project_id, edm.mvz;
